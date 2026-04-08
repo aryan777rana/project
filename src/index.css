@@ -175,6 +175,24 @@ h1, h2, h3 {
   border-color: rgba(0,0,0,0.15);
 }
 
+.btn-danger {
+  background: var(--danger);
+  color: white;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  border-radius: 8px;
+}
+
 .text-error {
   color: var(--danger);
   font-size: 0.875rem;

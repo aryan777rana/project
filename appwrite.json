@@ -163,7 +163,9 @@
             "$id": "analyze-report",
             "name": "Analyze Medical Report (Azure AI)",
             "runtime": "node-18.0",
-            "execute": ["any"],
+            "execute": [
+                "any"
+            ],
             "events": [
                 "databases.medical_data.collections.reports.documents.*.create"
             ],
