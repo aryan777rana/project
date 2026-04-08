@@ -160,11 +160,16 @@ async function generateGeminiSummary({ content, structuredData, log }) {
     const tablePreview = buildPriorityTablePreview(structuredData.tables);
 
     const prompt = [
-        "Generate a concise summary in plain language for a patient-facing health app.",
+        "Generate a detailed summary in plain language for a patient-facing health app.",
         "Review the extracted key-value pairs, raw text, and especially the table values before writing the summary.",
         "If table values suggest notable patterns, trends, abnormal-looking ranges, or repeated measurements, mention that as a careful observation.",
         "Only use information supported by the extracted data. If details are unclear, say that the source is unclear.",
         "Do not invent facts. Do not present observations as a diagnosis.",
+        "Write a longer overview using 2 to 4 sentences.",
+        "For the remaining sections, use bullet points.",
+        "Include specific lab names, numeric values, units, and positive or negative findings when they are present in the extracted data.",
+        "If there are multiple important measurements, mention each one as a separate bullet.",
+        "Aim for roughly 150 to 250 words unless the source data is very limited.",
         "Use these sections exactly:",
         "Overview:",
         "Important details:",
@@ -195,9 +200,10 @@ async function generateGeminiSummary({ content, structuredData, log }) {
                         {
                             text: [
                                 "You are a medical document summarization assistant for a patient-facing application.",
-                                "Your job is to summarize extracted report data clearly and cautiously.",
+                                "Your job is to summarize extracted report data clearly, cautiously, and with useful detail.",
                                 "Inspect tables carefully and try to deduce meaningful observations from numeric values, labels, and trends when they are supported by the data.",
                                 "Do not invent facts or provide a diagnosis.",
+                                "Prefer a longer overview followed by bullet points for key findings and follow-up items.",
                                 "Always end with a brief note telling the user to consult with their doctor."
                             ].join(' ')
                         }
@@ -211,7 +217,7 @@ async function generateGeminiSummary({ content, structuredData, log }) {
                 generationConfig: {
                     temperature: 0.6,
                     topP: 0.8,
-                    maxOutputTokens: 600
+                    maxOutputTokens: 900
                 }
             })
         }
