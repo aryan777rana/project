@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { databases, storage } from "../lib/appwrite";
+import { databases, storage, functions } from "../lib/appwrite";
 import { motion } from "framer-motion";
 
 export default function ReportDetails() {
@@ -9,29 +9,89 @@ export default function ReportDetails() {
     const [data, setData] = useState(null);
     const [imageUrl, setImageUrl] = useState("");
     const [error, setError] = useState("");
+    const [summaryLoading, setSummaryLoading] = useState(false);
+    const [summaryMessage, setSummaryMessage] = useState("");
+
+    async function fetchDetails() {
+        try {
+            const doc = await databases.getDocument("medical_data", "reports", id);
+            setReport(doc);
+            
+            if (doc.fileId) {
+                const previewUrl = await storage.getFileView("reports_bucket", doc.fileId);
+                setImageUrl(previewUrl);
+            }
+
+            if (doc.structuredData) {
+                setData(JSON.parse(doc.structuredData));
+            } else {
+                setData(null);
+            }
+        } catch (err) {
+            setError(err.message);
+        }
+    }
 
     useEffect(() => {
-        async function fetchDetails() {
-            try {
-                const doc = await databases.getDocument("medical_data", "reports", id);
-                setReport(doc);
-                
-                // Fetch image preview URL from storage
-                if (doc.fileId) {
-                    const previewUrl = await storage.getFileView("reports_bucket", doc.fileId);
-                    setImageUrl(previewUrl);
-
-                }
-
-                if (doc.structuredData) {
-                    setData(JSON.parse(doc.structuredData));
-                }
-            } catch (err) {
-                setError(err.message);
-            }
-        }
         fetchDetails();
     }, [id]);
+
+    useEffect(() => {
+        if (!summaryLoading || !id) {
+            return undefined;
+        }
+
+        const intervalId = window.setInterval(async () => {
+            try {
+                const doc = await databases.getDocument("medical_data", "reports", id);
+                const nextData = doc.structuredData ? JSON.parse(doc.structuredData) : null;
+                const nextSummary = nextData?.geminiSummary?.trim();
+                const nextSummaryStatus = nextData?.geminiSummaryStatus;
+
+                setReport(doc);
+                setData(nextData);
+
+                if (nextSummary) {
+                    setSummaryLoading(false);
+                    setSummaryMessage("Summary generated successfully.");
+                } else if (nextSummaryStatus === 'failed') {
+                    setSummaryLoading(false);
+                    setSummaryMessage(nextData?.geminiError || "Summary generation failed. Please try again later.");
+                } else if (nextSummaryStatus === 'skipped') {
+                    setSummaryLoading(false);
+                    setSummaryMessage("Summary generation is not enabled for this function right now.");
+                }
+            } catch (pollError) {
+                setSummaryLoading(false);
+                setSummaryMessage(pollError.message);
+            }
+        }, 4000);
+
+        return () => window.clearInterval(intervalId);
+    }, [summaryLoading, id]);
+
+    async function handleGenerateSummary() {
+        if (!report?.$id || !report?.fileId || summaryLoading) {
+            return;
+        }
+
+        setSummaryLoading(true);
+        setSummaryMessage("Summary generation started. This page will refresh automatically.");
+
+        try {
+            await functions.createExecution(
+                "analyze-report",
+                JSON.stringify({
+                    reportId: report.$id,
+                    fileId: report.fileId
+                }),
+                true
+            );
+        } catch (executionError) {
+            setSummaryLoading(false);
+            setSummaryMessage(executionError.message);
+        }
+    }
 
     if (error) {
         return (
@@ -51,6 +111,11 @@ export default function ReportDetails() {
             </div>
         );
     }
+
+    const geminiSummary = data?.geminiSummary?.trim();
+    const geminiSummaryStatus = data?.geminiSummaryStatus;
+    const geminiError = data?.geminiError;
+    const canRetrySummary = report.status === 'Completed' && !geminiSummary;
 
     return (
         <motion.div 
@@ -103,6 +168,47 @@ export default function ReportDetails() {
                         </div>
                     ) : data ? (
                         <div>
+                            <div style={{ marginBottom: '2rem', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.16)', borderRadius: '14px', padding: '1.25rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                                    <h4 style={{ margin: 0, color: 'var(--primary)' }}>Gemini Summary</h4>
+                                    {canRetrySummary ? (
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            onClick={handleGenerateSummary}
+                                            disabled={summaryLoading}
+                                        >
+                                            {summaryLoading ? "Generating..." : "Generate Summary"}
+                                        </button>
+                                    ) : null}
+                                </div>
+                                {geminiSummary ? (
+                                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{geminiSummary}</div>
+                                ) : geminiSummaryStatus === 'skipped' ? (
+                                    <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+                                        Summary generation is not enabled yet. Add `GEMINI_API_KEY` to the Appwrite function environment to generate summaries.
+                                    </p>
+                                ) : geminiSummaryStatus === 'failed' ? (
+                                    <div>
+                                        <p style={{ margin: '0 0 0.5rem 0', color: 'var(--text-muted)' }}>
+                                            Gemini could not generate a summary for this document.
+                                        </p>
+                                        {geminiError ? (
+                                            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>{geminiError}</p>
+                                        ) : null}
+                                    </div>
+                                ) : (
+                                    <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+                                        Summary is not available for this document yet.
+                                    </p>
+                                )}
+                                {summaryMessage ? (
+                                    <p style={{ margin: '0.75rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                        {summaryMessage}
+                                    </p>
+                                ) : null}
+                            </div>
+
                             {data.keyValues && data.keyValues.length > 0 && (
                                 <div style={{ marginBottom: '2rem' }}>
                                     <h4 style={{ marginBottom: '1rem', color: 'var(--primary)' }}>Key Value Pairs</h4>
