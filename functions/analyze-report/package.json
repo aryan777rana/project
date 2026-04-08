@@ -1,0 +1,11 @@
+{
+  "name": "analyze-report",
+  "version": "1.0.0",
+  "description": "Analyzes medical documents via Microsoft Azure Document Intelligence",
+  "type": "module",
+  "main": "src/main.js",
+  "dependencies": {
+    "node-appwrite": "^14.1.0",
+    "@azure/ai-form-recognizer": "^5.0.0"
+  }
+}
